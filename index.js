@@ -509,7 +509,7 @@ const COMMANDS = [
   new SlashCommandBuilder().setName("set-role-information").setDescription("Edit role descriptions and visibility (Manage Roles)")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles).setDMPermission(false),
   new SlashCommandBuilder().setName("set-afk").setDescription("Turn your AFK status on or off (staff only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).setDMPermission(false)
+    .setDMPermission(false)
     .addStringOption(o => o.setName("state").setDescription("On or Off").setRequired(true)
       .addChoices({ name: "On", value: "on" }, { name: "Off", value: "off" }))
     .addStringOption(o => o.setName("note").setDescription("Why you are away (optional)").setMaxLength(300)),
@@ -1993,6 +1993,25 @@ const GOREBOX_FACTS = [
   "Character customization: skins, armor, hats and masks. Also GoreDoll styling, emotes, text chat and voice chat.",
   "Trading uses in-game currency. Dying makes you drop part of your money.",
   "Mature content: blood pooling and dismemberment, with ragdolls that react to wounds.",
+  "GB27 (Google Play listing, by F2Games): a physics-driven sandbox shooter with ragdoll physics, guns, bots and online play. Rated 18+ for extreme violence and user interaction. Platforms: Android and Windows PC. Listed as early access, with bugs and unfinished content.",
+  "GB27 damage: per-body-part damage, bleeding, knockouts, fire, explosives and radiation.",
+  "GB27 weapons: firearms with recoil based on real calibres, bullets that can pass through walls, and 25 melee weapons.",
+  "GB27 props: over 200 props (the listing also mentions 177 in its What's new section), including turrets and teleporters, plus a car to drive.",
+  "GB27 bots: ten NPC types. Bots take cover, react to gunfire and can man turrets.",
+  "GB27 gamemodes: Sandbox, Free for all, Team deathmatch, Gun Game, Maniac Mystery, Infection, Mutant survival, Juggernaut, Riot and Invasion, among others.",
+  "GB27 multiplayer STATUS IS CONFLICTING: the Google Play listing describes crossplay, public servers and chat. An official GoreBox Steam announcement (dated Mar 11, year not shown) says multiplayer is being removed entirely and development is moving to singleplayer. If asked whether multiplayer exists, say the status is unclear and point to the official announcements.",
+  "GoreBox official Steam announcements (V16.3, Feb 23): gesture system, radial menus, Divine Mode (/divine), new Canvas map, GoreDoll AI overhaul, dropkick, new nextbots (Gift, Serrano, Music Man, Kubaadamiec), new axe melee weapon and ACOG optic. This is the main GoreBox game, not GB27.",
+  "GoreBox official Steam announcement (Sep 27, year not shown): Steam achievements are coming and the next update reworks UI and weapon feel.",
+  "GB27 currency: GB$, a currency run by the server that hosts control, plus clan banks. Ld is the currency this server uses for giveaways. Do not say they are the same.",
+  "GB27 map creation: Map Editor on PC, publishing to the Workshop, and saving scenes. Custom gamemodes can be built with triggers and actions.",
+  "GB27 controls: full controller support and touch controls on mobile.",
+  "GB27 customization: face, hairstyles, beards, hats, masks and clothing.",
+  "GB27 world (third-party guide, v0.13.x, may be outdated): has a day and night cycle, weather, and swimmable water.",
+  "GB27 bots (third-party guide): use cover, reload behind it, track by sound and remember attackers. Difficulty is adjustable.",
+  "GB27 damage (third-party guide): bones, organs and blood loss from the impact point. Wounds persist on bodies and on the map.",
+  "GB27 modes (third-party guide, may be outdated): Sandbox, Maniac Mystery, Deathmatch, Team Deathmatch and Gun Game, all playable against bots.",
+  "GB27 has fewer weapons than the main GoreBox game (third-party guide). The exact GB27 weapon list is not verified, so do not list weapon names for GB27.",
+  "GB27 maps: no named official GB27 maps are verified. The server's official map cards are in the OFFICIAL MAPS list in BOT DATA.",
 ];
 
 function botKnowledge() {
@@ -2017,18 +2036,21 @@ function botKnowledge() {
 
 function aiSystemPrompt(guild) {
   return [
-    "You are Ld Bank, the sharp, witty assistant of a GoreBox 27 community on Discord.",
-    "ALWAYS reply in English, even when the user writes in Turkish or another language. Never reply in Turkish. Keep answers short (1 to 6 lines) and use Discord markdown where it helps, except when the user asks for a list of commands, maps or features: then give the complete list.",
+    "You are Ld Bank, a friendly, smart chat assistant in a GoreBox 27 community on Discord. Chat naturally like a helpful AI: answer general questions on any normal topic, not only server questions.",
+    "For GoreBox questions, use the GOREBOX FACTS below first. If the answer is not in them, say you are not sure and suggest checking the Steam page or asking the staff. Never guess game details.",
+    "ALWAYS reply in English, even when the user writes in Turkish or another language. Never reply in Turkish. Keep answers short (1 to 6 lines) and use Discord markdown where it helps, except when the user asks for a list of commands, maps or features or asks a question that needs a longer explanation: then give the complete answer.",
     "GOREBOX FACTS (verified, use these and only these for game questions):",
     GOREBOX_FACTS.map(f => "- " + f).join("\n"),
     "For any game detail not listed above, say you are not sure instead of guessing.",
-    "Do not invent facts that are not in the data below. If you are not sure, say so.",
+    "For server, bot and GoreBox facts, do not invent anything. If you are not sure, say so. For general knowledge, answer normally.",
     "You know every command and map in the BOT DATA. When asked about a command, map, owner or feature, answer from that data directly. Never say you cannot find a command or map that is listed there.",
     "Use the live server data when it is relevant. Mention channels and roles with the exact mention format given.",
     "You may be playful and lightly clever, but never harass or insult real people, never use slurs, and never reveal secrets such as keys or tokens.",
     "",
     "BOT DATA:",
     botKnowledge(),
+    "AI CHANNEL RULES: this channel is locked every night at 00:00 Europe/Istanbul time and when the daily AI limit is reached. If asked about closing time, say exactly that.",
+    "YOUR LIMITS: you cannot start giveaways, change roles, ban members or change settings from chat. Tell people to use the slash command instead (for example /giveaway or /set-role-information).",
     "",
     "LIVE SERVER DATA:",
     serverContext(guild),
@@ -2081,7 +2103,7 @@ async function askAI(system, contents) {
 
   let lastError = "no model tried";
   for (const model of models) {
-    const res = await groqRequest(key, { model, messages, max_tokens: 900, temperature: 0.9 });
+    const res = await groqRequest(key, { model, messages, max_tokens: 900, temperature: 0.3 });
 
     if (res.status === 200) {
       const data = JSON.parse(res.body);
