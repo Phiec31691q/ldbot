@@ -170,20 +170,29 @@ const APP_EMOJI = {
 };
 
 // e("name") -> the server app emoji tag (same IDs as before). Falls back to a server emoji with that name, else nothing.
-function e(name) {
-  if (APP_EMOJI[name]) return APP_EMOJI[name];
-  const found = client.emojis?.cache?.find(x => x.name === name);
-  if (found) return `<${found.animated ? "a" : ""}:${found.name}:${found.id}>`;
-  return "";
+// Which application emoji (from the pool) each name uses. Built at call time, so POOL exists.
+const EMOJI_KEYS = ["help","about","ai","ticket","claim","close","apply","application","edit","add","remove","send","next","color","announce","warning","cross","check","gift","finish","trophy","timer","refresh","members","join","stats","roles","setup","remind"];
+function poolIdFor(name) {
+  if (name === "party") return "1569806700884787233";
+  const idx = EMOJI_KEYS.indexOf(name);
+  return idx >= 0 ? POOL.list[idx] : null;
 }
-// Emoji by exact ID (for places where the name lookup is not enough).
-// Uses the application emoji list to know whether it is animated.
-const TITLE_PARTY_ID = "1569806700884787233";
-function emojiById(id, name) {
-  const found = client.application?.emojis?.cache?.get(id);
-  return `<${found?.animated ? "a" : ""}:${found?.name ?? name}:${id}>`;
+// e("name") -> <:name:id> tag that Discord can show. Returns "" when the emoji is not usable (never a broken tag).
+function e(name) {
+  const pid = poolIdFor(name);
+  const fromPool = pid ? appEmoji(pid) : "";
+  if (fromPool) return fromPool;
+  const raw = APP_EMOJI[name];
+  if (!raw) return "";
+  const cache = client.application?.emojis?.cache;
+  if (!cache || cache.size === 0) return raw; // not loaded yet
+  const id = raw.match(/(\d+)>$/)[1];
+  return cache.has(id) ? appEmoji(id) : "";
 }
 // Reaction target: "name:id" string for react(), or null when unknown.
+function emojiById(id, name) {
+  return appEmoji(id) || "";
+}
 function reactTarget(name) {
   const tag = APP_EMOJI[name];
   if (tag) { const m = /^<(a?):(\w+):(\d+)>$/.exec(tag); return `${m[1] ? "a:" : ""}${m[2]}:${m[3]}`; }
@@ -296,7 +305,12 @@ function parseEmoji(value) {
 
 const btn = (customId, label, style = ButtonStyle.Secondary, emoji) => {
   const b = new ButtonBuilder().setCustomId(customId).setLabel(cut(label, 80)).setStyle(style);
-  if (emoji) b.setEmoji(parseEmoji(emoji));
+  if (emoji) {
+    const id = (String(emoji).match(/(\d{15,25})>$/) || [])[1];
+    const known = c => client.application?.emojis?.cache?.has(c) || client.emojis?.cache?.has(c);
+    const loaded = (client.application?.emojis?.cache?.size ?? 0) > 0;
+    if (!id || !loaded || known(id)) b.setEmoji(parseEmoji(emoji));
+  }
   return b;
 };
 const row = (...components) => new ActionRowBuilder().addComponents(components);
@@ -445,26 +459,6 @@ const COMMANDS = [
   adminCmd("dm", "Send a direct message to a user")
     .addUserOption(o => o.setName("user").setDescription("Target user").setRequired(true))
     .addStringOption(o => o.setName("text").setDescription("Message").setRequired(true).setMaxLength(2000)),
-
-  adminCmd("ticket-setup", "Set the ticket log channel")
-    .addChannelOption(textOpt("log_channel", "Channel that receives transcripts")),
-
-  adminCmd("ticket-category-add", "Add a ticket category")
-    .addStringOption(o => o.setName("name").setDescription("Category name (shown in the menu)").setRequired(true).setMaxLength(40))
-    .addStringOption(o => o.setName("description").setDescription("Short description").setMaxLength(100))
-    .addStringOption(o => o.setName("welcome").setDescription("Welcome text. Use {user} and {category}").setMaxLength(1000))
-    .addRoleOption(o => o.setName("support_role").setDescription("Staff role for this category"))
-    .addChannelOption(o => o.setName("parent_category").setDescription("Discord category for these tickets").addChannelTypes(ChannelType.GuildCategory)),
-
-  adminCmd("ticket-category-remove", "Remove a ticket category")
-    .addStringOption(o => o.setName("name").setDescription("Category name").setRequired(true).setMaxLength(40)),
-
-  adminCmd("ticket-categories", "List ticket categories"),
-
-  adminCmd("ticket-panel", "Post the ticket panel (pick a color next)")
-    .addStringOption(o => o.setName("title").setDescription("Panel title").setRequired(true).setMaxLength(256))
-    .addStringOption(o => o.setName("description").setDescription("Panel description").setRequired(true).setMaxLength(2000))
-    .addChannelOption(textOpt("channel", "Channel to post in")),
 
   adminCmd("giveaway", "Start a giveaway (pick a color, then a duration)")
     .addStringOption(o => o.setName("prize").setDescription("What is the prize").setRequired(true).setMaxLength(200))
@@ -620,12 +614,12 @@ const helpEmbed = () => embed(`${e("help")} Ld Bank | Help`, [
   `${e("sparkle")} **Public:** \`/help\` \`/about\` \`/mywarn\` \`/publicwarn\` \`/official-map\` \`/ld-stock\` \`/poll\` \`/serverinfo\` \`/userinfo\` \`/remind\` \`/counting-stats\``,
   `${e("ai")} **Ld Bank AI and games (admin):** \`/talk-to-bot\` \`/talk-to-bot-off\` \`/counting-setup\``,
   `${e("announce")} **Messaging (admin):** \`/announcement\` \`/say\` \`/status\` \`/dm\``,
-  `${e("ticket")} **Tickets (admin):** \`/ticket-setup\` \`/ticket-category-add\` \`/ticket-category-remove\` \`/ticket-categories\` \`/ticket-panel\``,
+  `${e("ticket")} **Tickets (admin):** \`/set-ticket-system\``,
   `${e("party")} **Giveaways (admin):** \`/giveaway\` \`/giveaway-end\` \`/giveaway-reroll\` \`/giveaway-cancel\``,
   `${e("application")} **Applications (admin):** \`/application-setup\` (opens the panel builder)`,
   `${e("roles")} **Button roles (admin):** \`/rolepanel-create\` \`/rolepanel-add\``,
-  `${e("roles")} **Role information:** `/roleinformation` (everyone) • `/set-role-information` (Manage Roles)`,
-  `${e("timer")} **AFK (staff):** `/set-afk` On / Off with an optional reason`,
+  `${e("roles")} **Role information:** \`/roleinformation\` (everyone) • \`/set-role-information\` (Manage Roles)`,
+  `${e("timer")} **AFK (staff):** \`/set-afk\` On / Off with an optional reason`,
   `${e("setup")} **Server (admin):** \`/setup-server\` \`/add-emoji\``,
   `${e("automod")} **Moderation (admin):** \`/ban\` \`/kick\` \`/timeout\` \`/untimeout\` \`/warn\` \`/warnings\` \`/clear\` \`/lock\` \`/unlock\` \`/slowmode\` \`/automod\` \`/moderation-log\``,
 ].join("\n"));
@@ -1396,7 +1390,7 @@ async function onPublicCommand(i) {
 
   switch (name) {
     case "top-levels":
-      return i.reply(topPayload(i.guild, 0));
+      return i.reply(topPayload(i.guild, 0, i.user.id));
     case "rank":
       return i.reply({ ...rankPayload(i.guild, i.options.getUser("user") ?? i.user), allowedMentions: noMentions });
     case "roleinformation":
@@ -1446,7 +1440,8 @@ async function onPublicCommand(i) {
     case "serverinfo":
       return i.reply(serverInfoPayload(i.guild));
     case "userinfo":
-      return i.reply(await userInfoPayload(i));
+      await i.deferReply();
+      return i.editReply(await userInfoPayload(i));
     case "remind": {
       const minutes = i.options.getInteger("minutes", true);
       const text = i.options.getString("text", true).trim();
@@ -2165,7 +2160,7 @@ client.on(Events.MessageCreate, async msg => {
       await lockAiChannel(msg.guild.id, "The AI limit or token ran out. The channel is locked.");
       return;
     }
-    const text = err instanceof UserError ? err.message : `Ld Bank could not answer right now. Reference: \`${newId(3)}\``;
+    const text = err instanceof UserError ? err.message : `Ld Bank could not answer right now. Reason: ${cut(String(err.message || err), 160)}. Reference: \`${newId(3)}\``;
     if (!(err instanceof UserError)) console.error("[AI] HATA:", err.stack || err.message);
     await msg.reply({ content: text, allowedMentions: noMentions }).catch(() => {});
   }
@@ -2451,7 +2446,7 @@ async function setAfk(i) {
         "",
         nickOk
           ? `Your nickname now shows the ${AFK_TAG.trim()} tag.`
-          : "I could not add the [AFK] tag to your nickname (my role may be too low). Your AFK status is still active.",
+          : "I could not add the [AFK] tag. Discord only lets me change the nickname of members whose top role is below my top role, and the server owner's nickname can never be changed. Move my role above the member's roles in Server Settings > Roles. Your AFK status is still active.",
       ].join("\n"))],
     });
   }
@@ -2861,21 +2856,24 @@ function rankPayload(guild, user) {
   };
 }
 
-function topPayload(guild, page) {
+function topPayload(guild, page, viewerId = null) {
   const board = Object.entries(xpStore(guild.id))
     .filter(([, u]) => u.xp > 0)
     .sort((a, b) => b[1].xp - a[1].xp);
   const pages = Math.max(1, Math.ceil(board.length / TL_PER_PAGE));
   const p = Math.min(Math.max(page, 0), pages - 1);
-  const lines = board.slice(p * TL_PER_PAGE, p * TL_PER_PAGE + TL_PER_PAGE).map(([uid, u], k) => {
+  const rows = board.slice(p * TL_PER_PAGE, p * TL_PER_PAGE + TL_PER_PAGE).map(([uid, u], k) => {
     const rank = p * TL_PER_PAGE + k + 1;
-    const badge = rank <= 3 ? appEmoji(POOL.rank[rank - 1]) : "";
-    const label = badge || `**${rank}.**`;
-    return `${label} <@${uid}> • Level **${levelFromXp(u.xp).level}** • ${fmt(u.xp)} XP`;
+    const lv = levelFromXp(u.xp).level;
+    const medal = rank <= 3 ? (appEmoji(POOL.rank[rank - 1]) || `**#${rank}**`) : `**${rank}.**`;
+    const line = `${medal} <@${uid}>  •  Level **${lv}**  •  ${fmt(u.xp)} XP`;
+    return rank <= 3 ? `${line}\n` : line;
   });
-  const em = embed(`${pickEmoji(POOL.list, 2) || e("trophy")} Top levels`,
-    lines.join("\n") || "Nobody has earned XP yet. Start chatting!");
-  em.setFooter({ text: `Page ${p + 1} of ${pages} • Ld Bank v${BOT_VERSION}` });
+  const yourPos = viewerId ? board.findIndex(([uid]) => uid === viewerId) + 1 : 0;
+  const em = embed(`${pickEmoji(POOL.list, 2) || e("trophy")} Top levels • ${guild.name}`,
+    rows.join("\n") || "Nobody has earned XP yet. Start chatting!",
+    WINTER_GOLD);
+  em.setFooter({ text: `${board.length} ranked member(s)${yourPos ? ` • You are #${yourPos}` : ""} • Page ${p + 1} of ${pages} • v${BOT_VERSION}` });
   return {
     embeds: [em],
     components: pages > 1 ? [pageRow("tl", p, pages)] : [],
@@ -2886,7 +2884,7 @@ function topPayload(guild, page) {
 async function onTopButton(i, parts) {
   const n = Number(parts[1]);
   if (!Number.isInteger(n)) return i.deferUpdate();
-  return i.update(topPayload(i.guild, n));
+  return i.update(topPayload(i.guild, n, i.user.id));
 }
 
 
@@ -4226,7 +4224,7 @@ client.on(Events.InteractionCreate, async i => {
   try {
     if (i.isChatInputCommand()) return await onCommand(i);
     if (i.isButton()) return await onButton(i);
-    if (i.isStringSelectMenu()) return await onSelect(i);
+    if (i.isStringSelectMenu() || i.isChannelSelectMenu() || i.isRoleSelectMenu()) return await onSelect(i);
     if (i.isModalSubmit()) return await onModal(i);
   } catch (err) {
     let content;
@@ -4270,6 +4268,15 @@ http.createServer((req, res) => {
   res.writeHead(ready ? 200 : 503, { "Content-Type": "application/json", "Cache-Control": "no-store" });
   res.end(JSON.stringify({ service: "Ld Bank", ready }));
 }).listen(CONFIG.PORT, "0.0.0.0", () => console.log(`Health server on port ${CONFIG.PORT}`));
+
+// Keep-alive: Render free web services sleep after ~15 minutes without HTTP traffic.
+// Pinging our own health URL keeps the process (and the Discord connection) running.
+const KEEPALIVE_URL = process.env.RENDER_EXTERNAL_URL;
+if (KEEPALIVE_URL) {
+  setInterval(() => {
+    require("https").get(KEEPALIVE_URL, res => res.resume()).on("error", () => {});
+  }, 10 * 60 * 1000);
+}
 
 client.login(TOKEN).catch(err => {
   console.error("Login failed:", err.message);
