@@ -1,0 +1,21 @@
+{
+  "name": "ld-bank",
+  "version": "3.2.0",
+  "description": "Ld Bank Discord bot: ekonomi, mağaza, petler, rütbeler, kumar, çekiliş ve moderasyon",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "start": "node index.js",
+    "check": "node --check index.js && node --check economy.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.0",
+    "discord.js": "^14.16.3",
+    "@discordjs/voice": "^0.17.0",
+    "libsodium-wrappers": "^0.7.15",
+    "opusscript": "^0.1.1"
+  }
+}
